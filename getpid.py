@@ -18,6 +18,7 @@ PROCESS_TERMINATE = 0x0001
 PROCESS_QUERY_INFORMATION = 0x0400
 
 def getpid(procname):
+    procname = procname.encode("latin-1")
     count = 32
     while True:
         ProcessIds = (ctypes.wintypes.DWORD*count)()
@@ -42,7 +43,7 @@ def getpid(procname):
                 filename = os.path.basename(ImageFileName.value)
                 # print(filename)
                 # print(procname)
-                if filename == bytearray(procname,'latin1'):
+                if filename == procname:
                     CloseHandle(hProcess)
                     return ProcessId
             CloseHandle(hProcess)
