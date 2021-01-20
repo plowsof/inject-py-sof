@@ -36,6 +36,8 @@ import ctypes.util
 import os
 import sys
 from getpid import getpid
+from win32api import GetSystemMetrics
+import time
 print("dumping env")
 print(os.environ['PYTHONPATH'])
 
@@ -78,6 +80,10 @@ FILE_FLAG_OVERLAPPED = 0x40000000
 ERROR_IO_PENDING = 997
 ERROR_PIPE_CONNECTED = 535
 ERROR_BROKEN_PIPE = 109
+
+userdir = "C:/Users/Human/Desktop/Raven/SOF PLATINUM/user"
+
+resdir = os.path.join(userdir,"sofplus/data/mm_desktop_res")
 
 def _escape(path):
 	escaped_path = path.replace('\\', '\\\\')
@@ -141,6 +147,13 @@ class NamedPipeClient(object):
 			return success()
 		m_k32.CloseHandle(handle)
 		raise ctypes.WinError()
+def getDesktopResBegin():
+	#print("Width =", GetSystemMetrics(0))
+	#print("Height =", GetSystemMetrics(1))
+	resDesktop={}
+	resDesktop[0]=GetSystemMetrics(0)
+	resDesktop[1]=GetSystemMetrics(1)
+	return resDesktop
 
 def main():
 	parser = argparse.ArgumentParser(description='python_injector: inject python code into a process', conflict_handler='resolve')
@@ -152,8 +165,12 @@ def main():
 	if not sys.platform.startswith('win'):
 		print('[-] This tool is only available on Windows')
 		return
-
+	print(f"Searching for {arguments.procname}....")
 	proc_pid = getpid(arguments.procname)
+	while proc_pid is None:
+		time.sleep(1)
+		proc_pid = getpid(arguments.procname)
+	print("SUCCESS\n")
 	if proc_pid is None:
 		print("Cant find process")
 		sys.exit(1)
@@ -211,6 +228,9 @@ def main():
 	thread_h = process_h.start_thread(py_run_simple_string, alloced_addr)
 	client = NamedPipeClient.from_named_pipe(PIPE_NAME)
 	print('[*] Client connected on named pipe')
+	desktopXY = getDesktopResBegin()
+	with open(resdir, "w+") as f:
+		f.write(str(desktopXY[0])+"x"+str(desktopXY[1]))
 	while True:
 		message = client.read()
 		if message is None:
