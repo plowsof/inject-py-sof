@@ -36,11 +36,10 @@ import ctypes.util
 import os
 import sys
 from getpid import getpid
-from win32api import GetSystemMetrics
-import time
+print("dumping env")
+print(os.environ['PYTHONPATH'])
 
-
-# sys.path.insert(1, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
+sys.path.insert(1, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
 from mayhem import utilities
 from mayhem.datatypes import windows as wintypes
@@ -61,15 +60,16 @@ import runpy
 import sys
 import traceback
 
-#pipe = open(r'\\.\\pipe\{pipe_name}', 'w+b', 0)
+pipe = open(r'\\.\\pipe\{pipe_name}', 'w+b', 0)
 sys.argv = ['']
-#sys.stderr = sys.stdout = codecs.getwriter('utf-8')(pipe)
+sys.stderr = sys.stdout = codecs.getwriter('utf-8')(pipe)
+
 try:
     runpy.run_path('{path}', run_name='__mayhem__')
 except:
     traceback.print_exc()
+pipe.close()
 
-#pipe.close()
 ctypes.windll.kernel32.ExitThread(0)
 """
 WAIT_OBJECT_0 = 0x00000000
@@ -78,10 +78,6 @@ FILE_FLAG_OVERLAPPED = 0x40000000
 ERROR_IO_PENDING = 997
 ERROR_PIPE_CONNECTED = 535
 ERROR_BROKEN_PIPE = 109
-
-userdir = "C:/Users/Human/Desktop/Raven/SOF PLATINUM/user"
-
-resdir = os.path.join(userdir,"sofplus/data/mm_desktop_res")
 
 def _escape(path):
 	escaped_path = path.replace('\\', '\\\\')
@@ -97,26 +93,6 @@ class NamedPipeClient(object):
 		self.handle = handle
 		self.buffer_size = buffer_size
 
-	'''
-	BOOL WriteFile(
-		HANDLE       hFile,
-		LPCVOID      lpBuffer,
-		DWORD        nNumberOfBytesToWrite,
-		LPDWORD      lpNumberOfBytesWritten,
-		LPOVERLAPPED lpOverlapped
-	);
-	'''
-	def write(self,bytesIn):
-		size = len(bytesIn)
-		ctarray = utilities.bytes_to_ctarray(bytesIn)
-		bytes_written = wintypes.DWORD(0)
-		overlapped = wintypes.OVERLAPPED(0)
-		# overlapped.hEvent = m_k32.CreateEventW(None, True, False, None)
-		if m_k32.WriteFile(self.handle,ctypes.byref(ctarray),size,ctypes.byref(bytes_written),ctypes.byref(overlapped)):
-			print("WRite succeeeded!!")
-		else:
-			print("Failed WRITE!!")
-
 	def read(self):
 		ctarray = (ctypes.c_byte * self.buffer_size)()
 		bytes_read = wintypes.DWORD(0)
@@ -127,10 +103,8 @@ class NamedPipeClient(object):
 			return utilities.ctarray_to_bytes(ctarray)[:bytes_read.value]
 		error = m_k32.GetLastError()
 		if error == ERROR_IO_PENDING and _wait_overlapped_io(overlapped):
-			print("err_io_pending_wait_overlapped")
 			return utilities.ctarray_to_bytes(ctarray)[:overlapped.InternalHigh]
 		if error == ERROR_BROKEN_PIPE:
-			print("err_broken_pipe")
 			return None
 		raise ctypes.WinError()
 
@@ -167,13 +141,6 @@ class NamedPipeClient(object):
 			return success()
 		m_k32.CloseHandle(handle)
 		raise ctypes.WinError()
-def getDesktopResBegin():
-	#print("Width =", GetSystemMetrics(0))
-	#print("Height =", GetSystemMetrics(1))
-	resDesktop={}
-	resDesktop[0]=GetSystemMetrics(0)
-	resDesktop[1]=GetSystemMetrics(1)
-	return resDesktop
 
 def main():
 	parser = argparse.ArgumentParser(description='python_injector: inject python code into a process', conflict_handler='resolve')
@@ -185,12 +152,8 @@ def main():
 	if not sys.platform.startswith('win'):
 		print('[-] This tool is only available on Windows')
 		return
-	print(f"Searching for {arguments.procname}....")
+
 	proc_pid = getpid(arguments.procname)
-	while proc_pid is None:
-		time.sleep(1)
-		proc_pid = getpid(arguments.procname)
-	print("SUCCESS\n")
 	if proc_pid is None:
 		print("Cant find process")
 		sys.exit(1)
@@ -237,11 +200,8 @@ def main():
 
 	print("[*] Waiting for client to connect on \\\\.\\pipe\\{0}".format(PIPE_NAME))
 	injection_stub = INJECTION_STUB_TEMPLATE
-	# print(_escape(os.path.abspath(arguments.script_path)))
-	# print(_escape(os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))))
 	injection_stub = injection_stub.format(
 		path=_escape(os.path.abspath(arguments.script_path)),
-		# incl_path=_escape(os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))),
 		pipe_name=PIPE_NAME
 	)
 	injection_stub = injection_stub.encode('utf-8') + b'\x00'
@@ -251,20 +211,11 @@ def main():
 	thread_h = process_h.start_thread(py_run_simple_string, alloced_addr)
 	client = NamedPipeClient.from_named_pipe(PIPE_NAME)
 	print('[*] Client connected on named pipe')
-	desktopXY = getDesktopResBegin()
-	#with open(resdir, "w+") as f:
-	#	f.write(str(desktopXY[0])+"x"+str(desktopXY[1]))
-	client.write(b"640x480")
-	
-	# while True:
-	# 	# time.sleep(1)
-	# 	print("Waiting for another message")
-	# 	message = client.read()
-	# 	if message is None:
-	# 		break
-	# 	print("Meesage!!!:\n")
-	# 	sys.stdout.write(message.decode('utf-8'))
-	
+	while True:
+		message = client.read()
+		if message is None:
+			break
+		sys.stdout.write(message.decode('utf-8'))
 	client.close()
 	process_h.join_thread(thread_h)
 	process_h.close()
